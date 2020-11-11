@@ -37,7 +37,9 @@ def unzip2(src: str, tag: str):
         os.makedirs(path)
 
     img = sitk.GetArrayFromImage(sitk.ReadImage(src))
-    [saveimage((img[i] == 2).astype(np.uint8), i, path) for i in range(img.shape[0])]
+    print(img.shape)
+    print(img)
+    # [saveimage((img[i] == 2).astype(np.uint8), i, path) for i in range(img.shape[0])]
 
 
 # convert to image

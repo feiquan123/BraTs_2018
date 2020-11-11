@@ -9,15 +9,15 @@ import os
 # config.gpu_options.per_process_gpu_memory_fraction = 0.3
 # session = tf.Session(config=config)
 
-from keras.layers import Input,Concatenate,BatchNormalization
-from keras.layers.advanced_activations import LeakyReLU,ReLU
+from keras.layers import Input, Concatenate, BatchNormalization
+from keras.layers.advanced_activations import LeakyReLU, ReLU
 from keras.layers.convolutional import UpSampling2D, Conv2D, Conv2DTranspose
 from resnet34 import ResNet34
 from keras.models import Sequential, Model
 from keras.optimizers import Adam
 from keras.activations import *
 # from load_data import *
-from utils import SEblock, mini_inception, category_label
+# from utils import SEblock, mini_inception, category_label
 import random
 import time
 import matplotlib.pyplot as plt
@@ -27,44 +27,50 @@ import numpy as np
 
 
 class GAN():
-    def __init__(self):
+    def __init__(self, input_shape=(4, 1 , 240, 240), output_channels=3):
+        c, H, W, D = input_shape
+        assert len(input_shape) == 4, "Input shape must be a 4-tuple"
+        assert (c % 4) == 0, "The no. of channels must be divisible by 4"
+        # assert (H % 16) == 0 and (W % 16) == 0 and (D % 16) == 0, \
+        #     "All the input dimensions must be divisible by 16"
+
         self.img_rows = 64
         self.img_cols = 64
         self.channels = 1
         self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.df=16
+        self.df = 16
         patch = int(self.img_rows / 2 ** 4)
         self.disc_patch = (patch, patch, 1)
 
         optimizer = Adam(0.0002, beta_1=0.5)
 
-        # Build and compile the discriminator
-        base_discriminator = self.build_discriminator()
-        self.discriminator = Model(inputs=base_discriminator.inputs, outputs=base_discriminator.outputs)
-        self.discriminator.compile(loss='mse',
-                                   optimizer=optimizer,
-                                   metrics=['accuracy'])
-
-        # Build the generator
-
-        base_generator = self.build_generator()
-        self.generator = Model(inputs=base_generator.inputs, outputs=base_generator.outputs)
-
-        img = Input(shape=self.img_shape)
-        label = Input(shape=self.img_shape)
-        fake_label = self.generator(img)
-
-        # For the combined model we will only train the generator
-        # self.discriminator.trainable = False
-        frozen_D = Model(inputs=base_discriminator.inputs, outputs=base_discriminator.outputs)
-        frozen_D.trainable = False
-        # The discriminator takes generated images as input and determines validity
-        validity = frozen_D([fake_label,img])
-
-        # The combined model  (stacked generator and discriminator)
-        # Trains the generator to fool the discriminator
-        self.combined = Model([label,img], [validity,fake_label])
-        self.combined.compile(loss=['mse','mae'],loss_weights=[1,100], optimizer=optimizer)
+        # # Build and compile the discriminator
+        # base_discriminator = self.build_discriminator()
+        # self.discriminator = Model(inputs=base_discriminator.inputs, outputs=base_discriminator.outputs)
+        # self.discriminator.compile(loss='mse',
+        #                            optimizer=optimizer,
+        #                            metrics=['accuracy'])
+        #
+        # # Build the generator
+        #
+        # base_generator = self.build_generator()
+        # self.generator = Model(inputs=base_generator.inputs, outputs=base_generator.outputs)
+        #
+        # img = Input(shape=self.img_shape)
+        # label = Input(shape=self.img_shape)
+        # fake_label = self.generator(img)
+        #
+        # # For the combined model we will only train the generator
+        # # self.discriminator.trainable = False
+        # frozen_D = Model(inputs=base_discriminator.inputs, outputs=base_discriminator.outputs)
+        # frozen_D.trainable = False
+        # # The discriminator takes generated images as input and determines validity
+        # validity = frozen_D([fake_label,img])
+        #
+        # # The combined model  (stacked generator and discriminator)
+        # # Trains the generator to fool the discriminator
+        # self.combined = Model([label,img], [validity,fake_label])
+        # self.combined.compile(loss=['mse','mae'],loss_weights=[1,100], optimizer=optimizer)
 
     def build_generator(self):
 
@@ -132,7 +138,6 @@ class GAN():
 
         return Model([img_A, img_B], validity)
 
-
     def generate_gt_img(self, label_train):
         x = get_real_data('./data_ADNI/Label', label_train)
         X = []
@@ -165,7 +170,7 @@ class GAN():
         # Adversarial ground truths
         valid = np.ones((batch_size,) + self.disc_patch)
         fake = np.zeros((batch_size,) + self.disc_patch)
-        with open('./loss_ADNI.txt','w')as f:
+        with open('./loss_ADNI.txt', 'w')as f:
             for epoch in range(epochs):
 
                 for step in range(len(label_train) // batch_size):
@@ -181,14 +186,14 @@ class GAN():
                     d_loss_real = self.discriminator.train_on_batch([label_batch, input_batch], valid)
                     d_loss_fake = self.discriminator.train_on_batch([gen_imgs, input_batch], fake)
                     d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-                    f.write(str(d_loss)+',')
+                    f.write(str(d_loss) + ',')
                     # ---------------------
                     #  Train Generator
                     # ---------------------
 
                     # Train the generator (to have the discriminator label samples as valid)
                     g_loss = self.combined.train_on_batch([label_batch, input_batch], [valid, label_batch])
-                    f.write(str(g_loss)+'\n')
+                    f.write(str(g_loss) + '\n')
                     end_time = time.time()
                     # Plot the progress
                     print(
@@ -204,10 +209,12 @@ class GAN():
                     self.sample_images(epoch)
 
     def sample_images(self, epoch):
-        val_file=os.listdir('./data_ADNI/Image/0')
+        val_file = os.listdir('./data_ADNI/Image/0')
         for item in val_file:
             img = np.expand_dims(
-                np.expand_dims(np.asarray(cv2.imread('./data_ADNI/Image/0/'+item, cv2.IMREAD_UNCHANGED), np.float32) / 255, -1), 0)
+                np.expand_dims(
+                    np.asarray(cv2.imread('./data_ADNI/Image/0/' + item, cv2.IMREAD_UNCHANGED), np.float32) / 255, -1),
+                0)
 
             gen_imgs = self.generator.predict(img)
 
@@ -216,6 +223,7 @@ class GAN():
             gen_imgs[gen_imgs > 255] = 255
             gen_imgs[gen_imgs < 0] = 0
             cv2.imwrite('./val_result/%s' % item, np.squeeze(np.asarray(gen_imgs, np.uint8)))
+
 
 if __name__ == '__main__':
     gan = GAN()
